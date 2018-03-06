@@ -118,8 +118,13 @@ namespace labeltool
             if (_myLabels == null) return;
 
             string folderName = myDiag.SelectedPath;
+            Directory.CreateDirectory(folderName + "\\images");
+            Directory.CreateDirectory(folderName + "\\labels");
 
-
+            foreach (MyLabelData label in _myLabels)
+            {
+                
+            }
         }
 
         private void LabelList_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
