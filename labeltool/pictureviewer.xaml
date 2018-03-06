@@ -1,0 +1,11 @@
+﻿<Window x:Class="labeltool.Pictureviewer"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="{Binding MyTitle}" d:DataContext="{d:DesignData MainWindow}" ResizeMode="NoResize" Height="300" Width="300">
+    <Grid x:Name="Grid" Width="800" Height="600">
+        <Canvas x:Name="Canvas"  HorizontalAlignment="Left" Margin="0" Width="800" Height="600" VerticalAlignment="Top" />
+    </Grid>
+</Window>
