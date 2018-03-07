@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Forms;
@@ -123,7 +124,15 @@ namespace labeltool
 
             foreach (MyLabelData label in _myLabels)
             {
+                string[] urlSplit = label.MyMultipolygon.Split('/');
+                string myFileName = urlSplit[urlSplit.Length - 1];
+                string[] fileNameSplit = myFileName.Split('.');
+                File.WriteAllText(folderName + "\\labels\\" + fileNameSplit[0] + ".txt", label.MyMultipolygon);
                 
+                using (var client = new WebClient())
+                {
+                    client.DownloadFile(label.MyUrl, folderName + "\\images\\" + myFileName);
+                }
             }
         }
 
