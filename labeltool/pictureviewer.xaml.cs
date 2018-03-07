@@ -14,7 +14,9 @@ using Point = System.Windows.Point;
 
 namespace labeltool
 {
-    /// <inheritdoc cref="" />
+    /// <inheritdoc>
+    ///     <cref></cref>
+    /// </inheritdoc>
     /// <summary>
     /// Interaktionslogik für pictureviewer.xaml
     /// </summary>
@@ -82,7 +84,7 @@ namespace labeltool
 
         private static Point PointParser(string pts, double imgratiox, double imgratioy)
         {
-            string[] xyStrings = pts.Split(new char[0]);
+            string[] xyStrings = pts.Split();
             double x = double.Parse(xyStrings[0], NumberStyles.Any, CultureInfo.InvariantCulture);
             double y = double.Parse(xyStrings[1], NumberStyles.Any, CultureInfo.InvariantCulture);
             x = x * imgratiox;
