@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Net;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Forms;
@@ -29,54 +31,59 @@ namespace labeltool
         }
 
         private List<MyLabelData> _myLabels;
+        private BackgroundWorker _myWorker;
+        private string _myFolder;
 
         public MainWindow()
         {
             InitializeComponent();
         }
-        
+
+        public class Labelbox
+        {
+            [JsonProperty("ID")]
+            public string Id { get; set; }
+
+            [JsonProperty("Labeled Data")]
+            public string LabeledData { get; set; }
+
+            [JsonProperty("Label")]
+            public dynamic Label { get; set; }
+
+            [JsonProperty("Created By")]
+            public string CreatedBy { get; set; }
+
+            [JsonProperty("Project Name")]
+            public string ProjectName { get; set; }
+
+            [JsonProperty("Seconds to Label")]
+            public string SecondsToLabel { get; set; }
+
+            [JsonProperty("External ID")]
+            public string ExternalId { get; set; }
+        }
+
 
         private void ImportJson(object sender, RoutedEventArgs e)
         {
             OpenFileDialog myFileDialog = new OpenFileDialog
             {
-                Filter = "JSON schema|*.json",
-                Title = "Load JSON SCHEMA"
+                Filter = "Labelbox JSON Export|*.json",
+                Title = "Import an exported JSON from labelbox.io"
             };
             if (myFileDialog.ShowDialog() != true)
             {
                 return;
             }
 
-            string myJsonSchema = File.ReadAllText(myFileDialog.FileName);
+            string myJson = File.ReadAllText(myFileDialog.FileName);
 
-            OpenFileDialog myFileDialog2 = new OpenFileDialog
-            {
-                Filter = "Labelbox JSON Export|*.json",
-                Title = "Import an exported JSON from labelbox.io"
-            };
-            if (myFileDialog2.ShowDialog() != true)
-            {
-                return;
-            }
-
-            string myJson = File.ReadAllText(myFileDialog2.FileName);
-
-            JSchema schema = JSchema.Parse(myJsonSchema);
-            dynamic myLabels = JsonConvert.DeserializeObject(myJson);
-
-            JToken json = JToken.Parse(myJson);
-
-            bool isValid = json.IsValid(schema);
-            if (!isValid)
-            {
-               return;
-            }
-
+            List<Labelbox> myLabels = JsonConvert.DeserializeObject<List<Labelbox>>(myJson);
+            
             _myLabels = new List<MyLabelData>();
-            foreach (dynamic myLabel in myLabels)
+            foreach (Labelbox myLabel in myLabels)
             {
-                string thisUrl = myLabel["Labeled Data"].ToString();
+                string thisUrl = myLabel.LabeledData;
                 string curLabel = null;
                 List<string> rawLabels = new List<string>();
                 foreach (dynamic multilabel in myLabel.Label)
@@ -109,6 +116,7 @@ namespace labeltool
             }
 
             LabelList.ItemsSource = _myLabels;
+            LblStatusbarInfo.Text = "JSON loaded successfully.";
         }
 
         private void CreateFolderStructure(object sender, RoutedEventArgs e)
@@ -118,21 +126,46 @@ namespace labeltool
             if (result != System.Windows.Forms.DialogResult.OK) return;
             if (_myLabels == null) return;
 
-            string folderName = myDiag.SelectedPath;
-            Directory.CreateDirectory(folderName + "\\images");
-            Directory.CreateDirectory(folderName + "\\labels");
+            _myFolder = myDiag.SelectedPath;
+            Directory.CreateDirectory(_myFolder + "\\images");
+            Directory.CreateDirectory(_myFolder + "\\labels");
 
+            _myWorker = new BackgroundWorker();
+            _myWorker.DoWork += WriteDataToFolder;
+            _myWorker.ProgressChanged += UpdateProgressBar;
+            _myWorker.RunWorkerCompleted += FinishedFolderCreation;
+            _myWorker.WorkerReportsProgress = true;
+            _myWorker.RunWorkerAsync();
+        }
+
+        private void FinishedFolderCreation(object sender, RunWorkerCompletedEventArgs e)
+        {
+            LblStatusbarInfo.Text = "Folder structure created";
+            StatusProgressBar.Value = 0;
+        }
+
+        private void UpdateProgressBar(object sender, ProgressChangedEventArgs e)
+        {
+            StatusProgressBar.Value = e.ProgressPercentage;
+        }
+
+        private void WriteDataToFolder(object sender, DoWorkEventArgs e)
+        {
+            int allLabels = _myLabels.Count;
+            int i = 1;
             foreach (MyLabelData label in _myLabels)
             {
-                string[] urlSplit = label.MyMultipolygon.Split('/');
+                string[] urlSplit = label.MyUrl.Split('/');
                 string myFileName = urlSplit[urlSplit.Length - 1];
                 string[] fileNameSplit = myFileName.Split('.');
-                File.WriteAllText(folderName + "\\labels\\" + fileNameSplit[0] + ".txt", label.MyMultipolygon);
-                
-                using (var client = new WebClient())
+                File.WriteAllText(_myFolder + "\\labels\\" + fileNameSplit[0] + ".txt", label.MyMultipolygon);
+
+                using (WebClient client = new WebClient())
                 {
-                    client.DownloadFile(label.MyUrl, folderName + "\\images\\" + myFileName);
+                    client.DownloadFile(label.MyUrl, _myFolder + "\\images\\" + myFileName);
                 }
+                _myWorker.ReportProgress(i/allLabels*100);
+                i++;
             }
         }
 

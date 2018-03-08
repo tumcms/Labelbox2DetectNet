@@ -6,10 +6,17 @@
         mc:Ignorable="d"
         Title="Labeltool 4 DetectNet" Height="350" Width="525" d:DataContext="{d:DesignData }">
     <Grid>
-        <Button Content="Import JSON" HorizontalAlignment="Left" Margin="10,10,0,0" VerticalAlignment="Top" Width="100" Click="ImportJson"/>
-        <Button Content="Create folder structure" HorizontalAlignment="Left" Margin="115,10,0,0" VerticalAlignment="Top" Width="150" Click="CreateFolderStructure"/>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" MinHeight="24" />
+            <RowDefinition />
+            <RowDefinition Height="Auto" MinHeight="23" />
+        </Grid.RowDefinitions>
+        <Menu Grid.Row="0" VerticalAlignment="Center" Height="24" Background="White">
+            <MenuItem Header="Import JSON" Height="24" Click="ImportJson"/>
+            <MenuItem Header="Create folder structure" Height="24" Click="CreateFolderStructure"/>
+        </Menu>
 
-        <ListView Name="LabelList" SelectionChanged="LabelList_OnSelectionChanged" Margin="10,35,10,10">
+        <ListView Grid.Row="1" Name="LabelList" SelectionChanged="LabelList_OnSelectionChanged">
             <ListView.View>
                 <GridView>
                     <GridViewColumn Header="URL" DisplayMemberBinding="{Binding MyUrl}" />
@@ -17,5 +24,27 @@
                 </GridView>
             </ListView.View>
         </ListView>
+        <StatusBar Grid.Row="2" VerticalAlignment="Bottom">
+            <StatusBar.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="200" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="150" />
+                        </Grid.ColumnDefinitions>
+                    </Grid>
+                </ItemsPanelTemplate>
+            </StatusBar.ItemsPanel>
+            <StatusBarItem Grid.Column="0">
+                <TextBlock Name="LblStatusbarInfo" />
+            </StatusBarItem>
+            <StatusBarItem Grid.Column="2">
+                <Grid>
+                    <ProgressBar Name="StatusProgressBar" Value="0" Width="140" Height="16" />
+                    <TextBlock Name="StatusProgressbarMsg" HorizontalAlignment="Center" VerticalAlignment="Center">-</TextBlock>
+                </Grid>
+            </StatusBarItem>
+        </StatusBar>
     </Grid>
 </Window>
