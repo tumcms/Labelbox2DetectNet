@@ -14,6 +14,7 @@
         <Menu Grid.Row="0" VerticalAlignment="Center" Height="24" Background="White">
             <MenuItem Header="Import JSON" Height="24" Click="ImportJson"/>
             <MenuItem Header="Create folder structure" Height="24" Click="CreateFolderStructure"/>
+            <MenuItem Header="Export cropped images" Height="24" Click="ExportSnippets" />
         </Menu>
 
         <ListView Grid.Row="1" Name="LabelList" SelectionChanged="LabelList_OnSelectionChanged">

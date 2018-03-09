@@ -44,7 +44,7 @@ namespace labeltool
             DataContext = this;
             MyTitle = myUrl;
             
-            Bitmap bitmap = LoadBitmap(myUrl);
+            Bitmap bitmap = MainWindow.LoadBitmap(myUrl);
             BitmapImage img = ConvertBitmapImage(bitmap);
             
             ImageBrush ib = new ImageBrush
@@ -72,16 +72,6 @@ namespace labeltool
             }
         }
 
-        private static Bitmap LoadBitmap(string url)
-        {
-            WebClient wc = new WebClient();
-
-            byte[] originalData = wc.DownloadData(url);
-            MemoryStream stream = new MemoryStream(originalData);
-            return new Bitmap(stream);
-        }
-
-
         private static Point PointParser(string pts, double imgratiox, double imgratioy)
         {
             string[] xyStrings = pts.Split();
@@ -92,7 +82,7 @@ namespace labeltool
             return new Point(x, y);
         }
 
-        private static BitmapImage ConvertBitmapImage(Bitmap src)
+        private static BitmapImage ConvertBitmapImage(Image src)
         {
             MemoryStream ms = new MemoryStream();
             src.Save(ms, ImageFormat.Bmp);

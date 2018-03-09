@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Drawing;
+using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Windows;
@@ -12,6 +15,7 @@ using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Schema;
 using ListView = System.Windows.Controls.ListView;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
+using Point = System.Windows.Point;
 
 namespace labeltool
 {
@@ -151,6 +155,7 @@ namespace labeltool
 
         private void WriteDataToFolder(object sender, DoWorkEventArgs e)
         {
+            BackgroundWorker backgroundWorker = sender as BackgroundWorker;
             int allLabels = _myLabels.Count;
             int i = 1;
             foreach (MyLabelData label in _myLabels)
@@ -164,7 +169,8 @@ namespace labeltool
                 {
                     client.DownloadFile(label.MyUrl, _myFolder + "\\images\\" + myFileName);
                 }
-                _myWorker.ReportProgress(i/allLabels*100);
+
+                backgroundWorker?.ReportProgress(i / allLabels * 100);
                 i++;
             }
         }
@@ -176,6 +182,56 @@ namespace labeltool
 
             Pictureviewer pictureviewer = new Pictureviewer(selectedLabel.MyUrl, selectedLabel.RawPolygons);
             pictureviewer.Show();
+        }
+
+        private void ExportSnippets(object sender, RoutedEventArgs e)
+        {
+            foreach (MyLabelData myLabelData in _myLabels)
+            {
+                Bitmap source = LoadBitmap(myLabelData.MyUrl);
+                Rectangle boundingBox = GetBoundingBox(myLabelData.RawPolygons);
+                Bitmap CroppedImage = source.Clone(boundingBox, source.PixelFormat);
+            }
+            
+
+        }
+
+        private static Rectangle GetBoundingBox(List<string> rawPolygons)
+        {
+            List<Point> myPoints = new List<Point>();
+            foreach (string polygon in rawPolygons)
+            {
+                string[] ptlist = polygon.Split(',');
+                myPoints.AddRange(ptlist.Select(PointParser));
+            }
+
+            int x = Convert.ToInt32(myPoints.Min(point => point.X));
+            int y = Convert.ToInt32(myPoints.Min(point => point.Y));
+            int width = Convert.ToInt32(myPoints.Max(point => point.X) - x);
+            int heigth = Convert.ToInt32(myPoints.Max(point => point.Y) - y);
+
+            Rectangle myRectangle = new Rectangle(x,y,width,heigth);
+            return myRectangle;
+        }
+
+
+
+        private static Point PointParser(string pts)
+        {
+            string[] xyStrings = pts.Split();
+            double x = double.Parse(xyStrings[0], NumberStyles.Any, CultureInfo.InvariantCulture);
+            double y = double.Parse(xyStrings[1], NumberStyles.Any, CultureInfo.InvariantCulture);
+            return new Point(x, y);
+        }
+
+
+        public static Bitmap LoadBitmap(string url)
+        {
+            WebClient wc = new WebClient();
+
+            byte[] originalData = wc.DownloadData(url);
+            MemoryStream stream = new MemoryStream(originalData);
+            return new Bitmap(stream);
         }
     }
 }
