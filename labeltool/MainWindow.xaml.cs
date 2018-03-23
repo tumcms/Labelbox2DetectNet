@@ -27,6 +27,7 @@ namespace labeltool
         private class MyLabelData
         {
             public string MyUrl { get; set; }
+            public string Filename { get; set; }
             public string MyMultipolygon { get; set; }
             public List<Tuple<string,List<Point>>> LabeledList { get; set; }
         }
@@ -78,12 +79,15 @@ namespace labeltool
             foreach (Labelbox myLabel in myLabels)
             {
                 string thisUrl = myLabel.LabeledData;
+                string[] filename = thisUrl.Split('/');
+                filename = filename.Last().Split('.');
                 string curLabel = null;
                 List<Tuple<string,List<Point>>> labeledList = new List<Tuple<string, List<Point>>>();
                 if(myLabel.Label.ToString() == "Skip") continue;
                 foreach (dynamic multilabel in myLabel.Label)
                 {
                     string labeltitle = multilabel.Name.ToString();
+                    
 
                     
                     foreach (dynamic singlelabel in multilabel.Value)
@@ -103,7 +107,9 @@ namespace labeltool
                             labPoints.Add(new Point(x,y));
                             curLabel += " " + x + " " + y;
                         }
-                        Tuple<string, List<Point>> curLabelTupel = new Tuple<string, List<Point>>(labeltitle,labPoints);
+
+                        if (labPoints.Count <= 1) continue;
+                        Tuple<string, List<Point>> curLabelTupel = new Tuple<string, List<Point>>(labeltitle, labPoints);
                         labeledList.Add(curLabelTupel);
                     }
                 }
@@ -111,6 +117,7 @@ namespace labeltool
                 _myLabels.Add(new MyLabelData
                 {
                     MyUrl = thisUrl,
+                    Filename = filename.First(),
                     MyMultipolygon = curLabel,
                     LabeledList = labeledList
                 });
@@ -210,28 +217,53 @@ namespace labeltool
                 int j = 1;
                 foreach (Tuple<string, List<Point>> labelTuple in myLabelData.LabeledList)
                 {
-                    Rectangle boundingBox = GetBoundingBox(labelTuple.Item2, source.Height);
-                    Bitmap croppedImage = source.Clone(boundingBox, source.PixelFormat);
-                    croppedImage.Save(_myFolder + "\\" + labelTuple.Item1 + "_" + i + "_" + j + ".jpg",
-                        ImageFormat.Jpeg);
-                    backgroundWorker?.ReportProgress(i / allLabels * 100);
-                    i++;
+                    Rectangle boundingBox = GetBoundingBox(labelTuple.Item2, source.Width, source.Height);
+                    string filename = _myFolder + "\\" + myLabelData.Filename + "_" + labelTuple.Item1 + "_" + j + ".jpg";
+
+                    SaveCroppedImage(filename, source, boundingBox);
                     j++;
                 }
-
-
-                
+                backgroundWorker?.ReportProgress(i / allLabels * 100);
+                i++;
             }
         }
 
-        private static Rectangle GetBoundingBox(IReadOnlyCollection<Point> labelList, int height)
+        private static void SaveCroppedImage(string filename, Bitmap source, Rectangle boundingBox)
         {
-            int x = Convert.ToInt32(labelList.Min(point => point.X));
-            int y = height - Convert.ToInt32(labelList.Max(point => point.Y));
-            int width = Convert.ToInt32(labelList.Max(point => point.X) - x);
-            int heigth = Convert.ToInt32(labelList.Max(point => point.Y) - Convert.ToInt32(labelList.Min(point => point.Y)));
+            Bitmap croppedImage = source.Clone(boundingBox, source.PixelFormat);
+            croppedImage.Save(filename, ImageFormat.Jpeg);
+        }
 
-            Rectangle myRectangle = new Rectangle(x, y, width, heigth);
+
+        private static Rectangle GetBoundingBox(IReadOnlyCollection<Point> labelList, int width, int height)
+        {
+            int maxX = Convert.ToInt32(labelList.Max(point => point.X));
+            if (maxX > width)
+            {
+                maxX = width;
+            }
+            int y = Convert.ToInt32(labelList.Max(point => point.Y));
+            if (y > height)
+            {
+                y = height;
+            }
+
+            int x = Convert.ToInt32(labelList.Min(point => point.X));
+            if (x < 0)
+            {
+                x = 0;
+            }
+            int minY = Convert.ToInt32(labelList.Min(point => point.Y));
+            if (minY < 0)
+            {
+                minY = 0;
+            }
+            int boxwidth = maxX - x;
+            int boxheight = y - minY;
+
+            y = height - y;
+
+            Rectangle myRectangle = new Rectangle(x, y, boxwidth, boxheight);
             return myRectangle;
         }
 
