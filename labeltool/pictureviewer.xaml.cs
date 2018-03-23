@@ -1,9 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
-using System.Globalization;
 using System.IO;
-using System.Net;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -36,7 +35,7 @@ namespace labeltool
         private const double MyStrokeThickness = 2;
 
 
-        public Pictureviewer(string myUrl, List<string> myLabels)
+        public Pictureviewer(string myUrl, IEnumerable<Tuple<string, List<Point>>> myLabels)
         {
             InitializeComponent();
 
@@ -58,11 +57,10 @@ namespace labeltool
             double imgratiox = MyWidth / imgWidth;
             double imgratioy = MyHeight / imgHeight;
 
-            foreach (string label in myLabels)
+            foreach (Tuple<string, List<Point>> label in myLabels)
             {
                 Polygon mypolygon = new Polygon();
-                string[] ptlist = label.Split(',');
-                foreach (string curpt in ptlist)
+                foreach (Point curpt in label.Item2)
                 {
                     mypolygon.Points.Add(PointParser(curpt,imgratiox, imgratioy));
                 }
@@ -72,13 +70,10 @@ namespace labeltool
             }
         }
 
-        private static Point PointParser(string pts, double imgratiox, double imgratioy)
+        private static Point PointParser(Point pts, double imgratiox, double imgratioy)
         {
-            string[] xyStrings = pts.Split();
-            double x = double.Parse(xyStrings[0], NumberStyles.Any, CultureInfo.InvariantCulture);
-            double y = double.Parse(xyStrings[1], NumberStyles.Any, CultureInfo.InvariantCulture);
-            x = x * imgratiox;
-            y = MyHeight - y * imgratioy;
+            double x = pts.X * imgratiox;
+            double y = MyHeight - pts.Y * imgratioy;
             return new Point(x, y);
         }
 

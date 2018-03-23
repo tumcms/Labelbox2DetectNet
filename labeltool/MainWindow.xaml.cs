@@ -2,17 +2,14 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
-using System.Globalization;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Forms;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Schema;
 using ListView = System.Windows.Controls.ListView;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using Point = System.Windows.Point;
@@ -31,7 +28,7 @@ namespace labeltool
         {
             public string MyUrl { get; set; }
             public string MyMultipolygon { get; set; }
-            public List<string> RawPolygons { get; set; }
+            public List<Tuple<string,List<Point>>> LabeledList { get; set; }
         }
 
         private List<MyLabelData> _myLabels;
@@ -45,26 +42,19 @@ namespace labeltool
 
         public class Labelbox
         {
-            [JsonProperty("ID")]
-            public string Id { get; set; }
+            [JsonProperty("ID")] public string Id { get; set; }
 
-            [JsonProperty("Labeled Data")]
-            public string LabeledData { get; set; }
+            [JsonProperty("Labeled Data")] public string LabeledData { get; set; }
 
-            [JsonProperty("Label")]
-            public dynamic Label { get; set; }
+            [JsonProperty("Label")] public dynamic Label { get; set; }
 
-            [JsonProperty("Created By")]
-            public string CreatedBy { get; set; }
+            [JsonProperty("Created By")] public string CreatedBy { get; set; }
 
-            [JsonProperty("Project Name")]
-            public string ProjectName { get; set; }
+            [JsonProperty("Project Name")] public string ProjectName { get; set; }
 
-            [JsonProperty("Seconds to Label")]
-            public string SecondsToLabel { get; set; }
+            [JsonProperty("Seconds to Label")] public string SecondsToLabel { get; set; }
 
-            [JsonProperty("External ID")]
-            public string ExternalId { get; set; }
+            [JsonProperty("External ID")] public string ExternalId { get; set; }
         }
 
 
@@ -73,7 +63,7 @@ namespace labeltool
             OpenFileDialog myFileDialog = new OpenFileDialog
             {
                 Filter = "Labelbox JSON Export|*.json",
-                Title = "Import an exported JSON from labelbox.io"
+                Title = "Import a LabelBox.io JSON file"
             };
             if (myFileDialog.ShowDialog() != true)
             {
@@ -83,31 +73,38 @@ namespace labeltool
             string myJson = File.ReadAllText(myFileDialog.FileName);
 
             List<Labelbox> myLabels = JsonConvert.DeserializeObject<List<Labelbox>>(myJson);
-            
+
             _myLabels = new List<MyLabelData>();
             foreach (Labelbox myLabel in myLabels)
             {
                 string thisUrl = myLabel.LabeledData;
                 string curLabel = null;
-                List<string> rawLabels = new List<string>();
+                List<Tuple<string,List<Point>>> labeledList = new List<Tuple<string, List<Point>>>();
+                if(myLabel.Label.ToString() == "Skip") continue;
                 foreach (dynamic multilabel in myLabel.Label)
                 {
                     string labeltitle = multilabel.Name.ToString();
 
-                    string thisMultipolygon = multilabel.Value.ToString();
-                    string thisPolygon = thisMultipolygon.Replace("MULTIPOLYGON (", "");
-                    thisPolygon = thisPolygon.Replace("((", "");
-                    thisPolygon = thisPolygon.Replace(")), ", ";");
-                    thisPolygon = thisPolygon.Replace(")", "");
-                    string[] polyArray = thisPolygon.Split(';');
-                    foreach (string thisPoly in polyArray)
+                    
+                    foreach (dynamic singlelabel in multilabel.Value)
                     {
                         if (curLabel != null)
                         {
                             curLabel += Environment.NewLine;
                         }
-                        curLabel += labeltitle + " " + thisPoly.Replace(",", "");
-                        rawLabels.Add(thisPoly.Replace(", ",","));
+
+                        curLabel += labeltitle;
+                        List<Point> labPoints = new List<Point>();
+
+                        foreach (dynamic coords in singlelabel)
+                        {
+                            int x = Convert.ToInt32(coords.x.Value);
+                            int y = Convert.ToInt32(coords.y.Value);
+                            labPoints.Add(new Point(x,y));
+                            curLabel += " " + x + " " + y;
+                        }
+                        Tuple<string, List<Point>> curLabelTupel = new Tuple<string, List<Point>>(labeltitle,labPoints);
+                        labeledList.Add(curLabelTupel);
                     }
                 }
 
@@ -115,7 +112,7 @@ namespace labeltool
                 {
                     MyUrl = thisUrl,
                     MyMultipolygon = curLabel,
-                    RawPolygons = rawLabels
+                    LabeledList = labeledList
                 });
             }
 
@@ -177,51 +174,65 @@ namespace labeltool
 
         private void LabelList_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            MyLabelData selectedLabel = (MyLabelData)((ListView)sender).SelectedItem;
+            MyLabelData selectedLabel = (MyLabelData) ((ListView) sender).SelectedItem;
             if (selectedLabel == null) return;
 
-            Pictureviewer pictureviewer = new Pictureviewer(selectedLabel.MyUrl, selectedLabel.RawPolygons);
+            Pictureviewer pictureviewer = new Pictureviewer(selectedLabel.MyUrl, selectedLabel.LabeledList);
             pictureviewer.Show();
         }
 
         private void ExportSnippets(object sender, RoutedEventArgs e)
         {
+            FolderBrowserDialog myDiag = new FolderBrowserDialog();
+            DialogResult result = myDiag.ShowDialog();
+            if (result != System.Windows.Forms.DialogResult.OK) return;
+            if (_myLabels == null) return;
+
+            _myFolder = myDiag.SelectedPath;
+
+            _myWorker = new BackgroundWorker();
+            _myWorker.DoWork += LoadImgForSnippets;
+            _myWorker.ProgressChanged += UpdateProgressBar;
+            _myWorker.RunWorkerCompleted += FinishedFolderCreation;
+            _myWorker.WorkerReportsProgress = true;
+            _myWorker.RunWorkerAsync();
+        }
+
+        private void LoadImgForSnippets(object sender, DoWorkEventArgs e)
+        {
+            BackgroundWorker backgroundWorker = sender as BackgroundWorker;
+            int i = 1;
+            int allLabels = _myLabels.Count;
             foreach (MyLabelData myLabelData in _myLabels)
             {
                 Bitmap source = LoadBitmap(myLabelData.MyUrl);
-                Rectangle boundingBox = GetBoundingBox(myLabelData.RawPolygons);
-                Bitmap CroppedImage = source.Clone(boundingBox, source.PixelFormat);
-            }
-            
 
+                int j = 1;
+                foreach (Tuple<string, List<Point>> labelTuple in myLabelData.LabeledList)
+                {
+                    Rectangle boundingBox = GetBoundingBox(labelTuple.Item2, source.Height);
+                    Bitmap croppedImage = source.Clone(boundingBox, source.PixelFormat);
+                    croppedImage.Save(_myFolder + "\\" + labelTuple.Item1 + "_" + i + "_" + j + ".jpg",
+                        ImageFormat.Jpeg);
+                    backgroundWorker?.ReportProgress(i / allLabels * 100);
+                    i++;
+                    j++;
+                }
+
+
+                
+            }
         }
 
-        private static Rectangle GetBoundingBox(List<string> rawPolygons)
+        private static Rectangle GetBoundingBox(IReadOnlyCollection<Point> labelList, int height)
         {
-            List<Point> myPoints = new List<Point>();
-            foreach (string polygon in rawPolygons)
-            {
-                string[] ptlist = polygon.Split(',');
-                myPoints.AddRange(ptlist.Select(PointParser));
-            }
+            int x = Convert.ToInt32(labelList.Min(point => point.X));
+            int y = height - Convert.ToInt32(labelList.Max(point => point.Y));
+            int width = Convert.ToInt32(labelList.Max(point => point.X) - x);
+            int heigth = Convert.ToInt32(labelList.Max(point => point.Y) - Convert.ToInt32(labelList.Min(point => point.Y)));
 
-            int x = Convert.ToInt32(myPoints.Min(point => point.X));
-            int y = Convert.ToInt32(myPoints.Min(point => point.Y));
-            int width = Convert.ToInt32(myPoints.Max(point => point.X) - x);
-            int heigth = Convert.ToInt32(myPoints.Max(point => point.Y) - y);
-
-            Rectangle myRectangle = new Rectangle(x,y,width,heigth);
+            Rectangle myRectangle = new Rectangle(x, y, width, heigth);
             return myRectangle;
-        }
-
-
-
-        private static Point PointParser(string pts)
-        {
-            string[] xyStrings = pts.Split();
-            double x = double.Parse(xyStrings[0], NumberStyles.Any, CultureInfo.InvariantCulture);
-            double y = double.Parse(xyStrings[1], NumberStyles.Any, CultureInfo.InvariantCulture);
-            return new Point(x, y);
         }
 
 
@@ -231,7 +242,9 @@ namespace labeltool
 
             byte[] originalData = wc.DownloadData(url);
             MemoryStream stream = new MemoryStream(originalData);
-            return new Bitmap(stream);
+            Bitmap myBitmap = new Bitmap(stream);
+            stream.Flush();
+            return myBitmap;
         }
     }
 }
