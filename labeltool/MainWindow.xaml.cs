@@ -197,10 +197,12 @@ namespace labeltool
                 {
                     Rectangle boundingBox = GetBoundingBox(labelTuple.Item2, source.Width, source.Height);
 
-                    int maxX = boundingBox.X + boundingBox.Width;
-                    int maxY = boundingBox.Y + boundingBox.Height;
+                    double maxX = Math.Round(Convert.ToDouble(boundingBox.X + boundingBox.Width),2);
+                    double maxY = Math.Round(Convert.ToDouble(boundingBox.Y + boundingBox.Height), 2);
+                    double minX = Math.Round(Convert.ToDouble(boundingBox.X), 2);
+                    double minY = Math.Round(Convert.ToDouble(boundingBox.Y), 2);
 
-                    string labelcontent = "Misc 0.00 0 0.0 " + boundingBox.X + " " + boundingBox.Y + " " + maxX + " " + maxY + " 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0";
+                    string labelcontent = "Misc 0.00 0 0.0 " + minX + ".00 " + minY + ".00 " + maxX + ".00 " + maxY + ".00 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0";
                     allLabelContent.AppendLine(labelcontent);
                 }
 
@@ -303,7 +305,7 @@ namespace labeltool
             int boxwidth = maxX - x;
             int boxheight = y - minY;
 
-            y = height - y;
+            //y = height - y;
 
             Rectangle myRectangle = new Rectangle(x, y, boxwidth, boxheight);
             return myRectangle;
