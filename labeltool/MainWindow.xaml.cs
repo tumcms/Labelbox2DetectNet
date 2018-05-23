@@ -211,7 +211,9 @@ namespace labeltool
                     client.DownloadFile(label.MyUrl, _myFolder + "\\images\\" + myFileName);
                 }
 
-                backgroundWorker?.ReportProgress(i / allLabels * 100);
+                double percentage = i / (double)allLabels;
+                int progressPercentage = Convert.ToInt32(percentage * 100);
+                backgroundWorker?.ReportProgress(progressPercentage);
                 i++;
             }
         }
@@ -255,13 +257,15 @@ namespace labeltool
                 foreach (Tuple<string, List<Point>> labelTuple in myLabelData.LabeledList)
                 {
                     Rectangle boundingBox = GetBoundingBox(labelTuple.Item2, source.Width, source.Height);
-                    if(boundingBox.Width < 100 || boundingBox.Height < 100) continue;
+                    if(boundingBox.Width < 200 || boundingBox.Height < 200) continue;
                     string filename = _myFolder + "\\" + myLabelData.Filename + "_" + labelTuple.Item1 + "_" + j + ".jpg";
 
                     SaveCroppedImage(filename, source, boundingBox);
                     j++;
                 }
-                backgroundWorker?.ReportProgress(i / allLabels * 100);
+                double percentage = i / (double)allLabels;
+                int progressPercentage = Convert.ToInt32(percentage * 100);
+                backgroundWorker?.ReportProgress(progressPercentage);
                 i++;
             }
         }
