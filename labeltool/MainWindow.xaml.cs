@@ -6,10 +6,15 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Forms;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Newtonsoft.Json;
+using Brush = System.Windows.Media.Brush;
+using Brushes = System.Windows.Media.Brushes;
 using ListView = System.Windows.Controls.ListView;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using Point = System.Windows.Point;
@@ -35,6 +40,8 @@ namespace labeltool
         private List<MyLabelData> _myLabels;
         private BackgroundWorker _myWorker;
         private string _myFolder;
+        private byte[] _colorArray;
+        private int _stride;
 
         public MainWindow()
         {
@@ -166,8 +173,38 @@ namespace labeltool
             {
                 string[] urlSplit = label.MyUrl.Split('/');
                 string myFileName = urlSplit[urlSplit.Length - 1];
-                string[] fileNameSplit = myFileName.Split('.');
-                File.WriteAllText(_myFolder + "\\labels\\" + fileNameSplit[0] + ".txt", label.MyMultipolygon);
+
+                //     1    type         Describes the type of object: 'Car', 'Van', 'Truck',
+                // 'Pedestrian', 'Person_sitting', 'Cyclist', 'Tram',
+                // 'Misc' or 'DontCare'
+                // 1    truncated    Float from 0 (non-truncated) to 1 (truncated), where
+                // truncated refers to the object leaving image boundaries
+                // 1    occluded     Integer (0,1,2,3) indicating occlusion state:
+                // 0 = fully visible, 1 = partly occluded
+                // 2 = largely occluded, 3 = unknown
+                // 1    alpha        Observation angle of object, ranging [-pi..pi]
+                // 4    bbox         2D bounding box of object in the image (0-based index):
+                // contains left, top, right, bottom pixel coordinates
+                // 3    dimensions   3D object dimensions: height, width, length (in meters)
+                // 3    location     3D object location x,y,z in camera coordinates (in meters)
+                // 1    rotation_y   Rotation ry around Y-axis in camera coordinates [-pi..pi]
+                // 1    score        Only for results: Float, indicating confidence in
+                // detection, needed for p/r curves, higher is better.
+
+                Bitmap source = LoadBitmap(label.MyUrl);
+                StringBuilder allLabelContent = new StringBuilder();
+                foreach (Tuple<string, List<Point>> labelTuple in label.LabeledList)
+                {
+                    Rectangle boundingBox = GetBoundingBox(labelTuple.Item2, source.Width, source.Height);
+
+                    int maxX = boundingBox.X + boundingBox.Width;
+                    int maxY = boundingBox.Y + boundingBox.Height;
+
+                    string labelcontent = "Misc 0.00 0 0.0 " + boundingBox.X + " " + boundingBox.Y + " " + maxX + " " + maxY + " 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0";
+                    allLabelContent.AppendLine(labelcontent);
+                }
+
+                File.WriteAllText(_myFolder + "\\labels\\" + label.Filename + ".txt", allLabelContent.ToString());
 
                 using (WebClient client = new WebClient())
                 {
@@ -218,6 +255,7 @@ namespace labeltool
                 foreach (Tuple<string, List<Point>> labelTuple in myLabelData.LabeledList)
                 {
                     Rectangle boundingBox = GetBoundingBox(labelTuple.Item2, source.Width, source.Height);
+                    if(boundingBox.Width < 100 || boundingBox.Height < 100) continue;
                     string filename = _myFolder + "\\" + myLabelData.Filename + "_" + labelTuple.Item1 + "_" + j + ".jpg";
 
                     SaveCroppedImage(filename, source, boundingBox);
@@ -278,5 +316,95 @@ namespace labeltool
             stream.Flush();
             return myBitmap;
         }
+
+        private void ExportMasks(object sender, RoutedEventArgs e)
+        {
+            FolderBrowserDialog myDiag = new FolderBrowserDialog();
+            DialogResult result = myDiag.ShowDialog();
+            if (result != System.Windows.Forms.DialogResult.OK) return;
+            if (_myLabels == null) return;
+
+            _myFolder = myDiag.SelectedPath;
+            _myWorker = new BackgroundWorker();
+            _myWorker.DoWork += CreateMasks;
+            _myWorker.ProgressChanged += UpdateProgressBar;
+            _myWorker.RunWorkerCompleted += FinishedFolderCreation;
+            _myWorker.WorkerReportsProgress = true;
+            _myWorker.RunWorkerAsync();
+        }
+
+        private void CreateMasks(object sender, DoWorkEventArgs e)
+        {
+            BackgroundWorker backgroundWorker = sender as BackgroundWorker;
+
+            int i = 1;
+            int allLabels = _myLabels.Count;
+            foreach (MyLabelData myLabelData in _myLabels)
+            {
+                Bitmap source = LoadBitmap(myLabelData.MyUrl);
+                WriteableBitmap bmp = new WriteableBitmap(source.Width, source.Height, 96, 96, PixelFormats.Indexed8, BitmapPalettes.Halftone256);
+                Int32Rect rect = new Int32Rect(0, 0, bmp.PixelWidth, bmp.PixelHeight);
+                int bytesPerPixel = (bmp.Format.BitsPerPixel + 7) / 8;
+                _stride = bmp.PixelWidth * bytesPerPixel;
+                int arraySize = _stride * bmp.PixelHeight;
+                _colorArray = new byte[arraySize];
+                const byte myrgb = 1;
+
+                foreach (Tuple<string, List<Point>> tuple in myLabelData.LabeledList)
+                {
+                    PixelLabelColoring(tuple.Item2, myrgb, source.Width, source.Height);
+                }
+                bmp.WritePixels(rect, _colorArray, _stride, 0);
+
+                using (FileStream outStream = new FileStream(_myFolder + "\\" + myLabelData.Filename + ".png", FileMode.Create))
+                {
+                    PngBitmapEncoder encoder = new PngBitmapEncoder();
+                    encoder.Frames.Add(BitmapFrame.Create(bmp));
+                    encoder.Save(outStream);
+                }
+
+                backgroundWorker?.ReportProgress(i / allLabels * 100);
+                i++;
+            }
+        }
+
+        private void PixelLabelColoring(IReadOnlyCollection<Point> pointlist, byte myrgb, int imageWidth, int imageHeight)
+        {
+            // BoundingBox within given Image
+            int minX = Convert.ToInt32(pointlist.Min(point => point.X));
+            int maxX = Convert.ToInt32(pointlist.Max(point => point.X));
+            int minY = Convert.ToInt32(pointlist.Min(point => point.Y));
+            int maxY = Convert.ToInt32(pointlist.Max(point => point.Y));
+            minX = minX > 1 ? minX : 1;
+            maxX = maxX > imageWidth ? imageWidth : maxX;
+            minY = minY > 1 ? minY : 1;
+            maxY = maxY > imageHeight ? imageHeight : maxY;
+            if ((minX >= imageWidth) && (minY >= imageHeight)) return;
+
+            for (int x = minX; x <= maxX; x++)
+            {
+                for (int y = minY; y <= maxY; y++)
+                {
+                    //double s = (CrossProduct(q, v2)) / (CrossProduct(v1, v2));
+                    //double t = (CrossProduct(v1, q)) / (CrossProduct(v1, v2));
+
+                    //if ((!(s >= 0)) || (!(t >= 0)) || (!(s + t <= 1))) continue;
+                    //double currentZ = CalcZ(p1, p2, p3, x, y);
+                    //int mydistpos = MyWidth * (y - 1) + (x - 1);
+                    //if (_distanceArray[mydistpos] != null && !(_distanceArray[mydistpos] > currentZ))
+                    //    continue;
+
+                    int myxinarray = x - 1;
+                    int myyinarray = (y - 1) * _stride;
+                    int start = myyinarray + myxinarray;
+                    _colorArray[start] = myrgb;
+                }
+            }
+        }
+
+        //private bool AreIntersecting()
+        //{
+
+        //}
     }
 }
