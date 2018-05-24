@@ -202,7 +202,16 @@ namespace labeltool
                     double minX = Math.Round(Convert.ToDouble(boundingBox.X), 2);
                     double minY = Math.Round(Convert.ToDouble(boundingBox.Y), 2);
 
-                    string labelcontent = "Misc 0.00 0 0.0 " + minX + ".00 " + minY + ".00 " + maxX + ".00 " + maxY + ".00 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0";
+                    string myCat = "dontcare -1 -1 -10 ";
+                    myCat = "dontcare 0.00 0 0.0 ";
+                    string myDefs = " -1 -1 -1 -1000 -1000 -1000 -10";
+                    myDefs = " 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0";
+                    if (boundingBox.Width >= 10 && boundingBox.Height >= 10)
+                    {
+                        myCat = "formwork 0.00 0 0.0 ";
+                        myDefs = " 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0";
+                    }
+                    string labelcontent = myCat + minX + ".00 " + minY + ".00 " + maxX + ".00 " + maxY + ".00" + myDefs;
                     allLabelContent.AppendLine(labelcontent);
                 }
 
@@ -282,14 +291,14 @@ namespace labeltool
         private static Rectangle GetBoundingBox(IReadOnlyCollection<Point> labelList, int width, int height)
         {
             int maxX = Convert.ToInt32(labelList.Max(point => point.X));
-            if (maxX > width)
+            if (maxX >= width)
             {
-                maxX = width;
+                maxX = width-1;
             }
             int y = Convert.ToInt32(labelList.Max(point => point.Y));
-            if (y > height)
+            if (y >= height)
             {
-                y = height;
+                y = height-1;
             }
 
             int x = Convert.ToInt32(labelList.Min(point => point.X));
@@ -305,7 +314,7 @@ namespace labeltool
             int boxwidth = maxX - x;
             int boxheight = y - minY;
 
-            //y = height - y;
+            y = height - y;
 
             Rectangle myRectangle = new Rectangle(x, y, boxwidth, boxheight);
             return myRectangle;
