@@ -192,35 +192,89 @@ namespace labeltool
                 // detection, needed for p/r curves, higher is better.
 
                 Bitmap source = LoadBitmap(label.MyUrl);
-                StringBuilder allLabelContent = new StringBuilder();
+                List<Tuple<Point,Point>> allLabeList = new List<Tuple<Point, Point>>();
                 foreach (Tuple<string, List<Point>> labelTuple in label.LabeledList)
                 {
                     Rectangle boundingBox = GetBoundingBox(labelTuple.Item2, source.Width, source.Height);
 
-                    double maxX = Math.Round(Convert.ToDouble(boundingBox.X + boundingBox.Width),2);
-                    double maxY = Math.Round(Convert.ToDouble(boundingBox.Y + boundingBox.Height), 2);
-                    double minX = Math.Round(Convert.ToDouble(boundingBox.X), 2);
-                    double minY = Math.Round(Convert.ToDouble(boundingBox.Y), 2);
+                    double maxX = boundingBox.X + boundingBox.Width;
+                    double maxY = boundingBox.Y + boundingBox.Height;
+                    double minX = boundingBox.X;
+                    double minY = boundingBox.Y;
 
-                    string myCat = "dontcare -1 -1 -10 ";
-                    myCat = "dontcare 0.00 0 0.0 ";
-                    string myDefs = " -1 -1 -1 -1000 -1000 -1000 -10";
-                    myDefs = " 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0";
-                    if (boundingBox.Width >= 10 && boundingBox.Height >= 10)
-                    {
-                        myCat = "formwork 0.00 0 0.0 ";
-                        myDefs = " 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0";
-                    }
-                    string labelcontent = myCat + minX + ".00 " + minY + ".00 " + maxX + ".00 " + maxY + ".00" + myDefs;
-                    allLabelContent.AppendLine(labelcontent);
+                    Point minPoint = new Point(minX,minY);
+                    Point maxPoint = new Point(maxX, maxY);
+                    Tuple < Point,Point > thisTuple = new Tuple<Point, Point>(minPoint,maxPoint);
+                    allLabeList.Add(thisTuple);
                 }
 
-                File.WriteAllText(_myFolder + "\\labels\\" + label.Filename + ".txt", allLabelContent.ToString());
 
-                using (WebClient client = new WebClient())
+                // SPLIT SOURCE IMG INTO PATCHES 1248 x 384 px
+                const int definedPatchX = 1248;
+                const int definedPatchY = 384;
+                int amountXdir = Convert.ToInt32(Math.Ceiling((double)source.Width / definedPatchX));
+                int restX = Convert.ToInt32(Math.Ceiling(((double)amountXdir * definedPatchX - source.Width) / (amountXdir - 1)));
+                int amountYdir = Convert.ToInt32(Math.Ceiling((double)source.Height / definedPatchY));
+                int restY = Convert.ToInt32(Math.Ceiling(((double)amountYdir * definedPatchY - source.Height) / (amountYdir - 1)));
+
+                for (int j = 0; j < amountXdir; j++)
                 {
-                    client.DownloadFile(label.MyUrl, _myFolder + "\\images\\" + myFileName);
+                    for (int k = 0; k < amountYdir; k++)
+                    {
+                        int patchStartX = j * definedPatchX - (j * restX);
+                        int patchEndX = patchStartX + definedPatchX;
+                        int patchStartY = k * definedPatchY - (k * restY);
+                        int patchEndY = patchStartY + definedPatchY;
+                        List<Tuple<Point, Point>> includedTuples = allLabeList.Where(p => (p.Item1.X >= patchStartX && p.Item1.X <= patchEndX && p.Item1.Y >= patchStartY && p.Item1.Y <= patchEndY) || p.Item2.X >= patchStartX && p.Item2.X <= patchEndX && p.Item2.Y >= patchStartY && p.Item2.Y <= patchEndY).ToList();
+                        //List<Tuple<Point, Point>> endPointTuple = allLabeList.Where(p => p.Item2.X >= patchStartX && p.Item2.X <= patchEndX && p.Item2.Y >= patchStartY && p.Item2.Y <= patchEndY).ToList();
+
+
+                        if (!includedTuples.Any()) continue;
+
+                        StringBuilder allLabelContent = new StringBuilder();
+
+                        foreach (Tuple<Point, Point> tuple in includedTuples)
+                        {
+                            int minX = Convert.ToInt32(tuple.Item1.X - patchStartX) < 0
+                                ? 0
+                                : Convert.ToInt32(tuple.Item1.X - patchStartX);
+                            int minY = Convert.ToInt32(tuple.Item1.Y - patchStartY) < 0
+                                ? 0
+                                : Convert.ToInt32(tuple.Item1.Y - patchStartY);
+
+                            int maxX = Convert.ToInt32(tuple.Item2.X - patchStartX) > definedPatchX
+                                ? definedPatchX
+                                : Convert.ToInt32(tuple.Item2.X - patchStartX);
+                            int maxY = Convert.ToInt32(tuple.Item2.Y - patchStartY) > definedPatchY
+                                ? definedPatchY
+                                : Convert.ToInt32(tuple.Item2.Y - patchStartY);
+
+                            string myCat = "dontcare -1 -1 -10 ";
+                            myCat = "dontcare 0.00 0 0.0 ";
+                            string myDefs = " -1 -1 -1 -1000 -1000 -1000 -10";
+                            myDefs = " 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0";
+                            if ((maxX - minX) >= 10 && (maxY - minY) >= 10)
+                            {
+                                myCat = "formwork 0.00 0 0.0 ";
+                                myDefs = " 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0";
+                            }
+                            string labelcontent = myCat + minX + ".00 " + minY + ".00 " + maxX + ".00 " + maxY + ".00" + myDefs;
+                            allLabelContent.AppendLine(labelcontent);
+                        }
+
+                        string curLabelFilename = label.Filename + "_" + j + "_" + k;
+                        File.WriteAllText(_myFolder + "\\labels\\" + curLabelFilename + ".txt", allLabelContent.ToString());
+
+                        string filename = _myFolder + "\\images\\" + curLabelFilename + ".jpg";
+                        Rectangle myBoundingBox = new Rectangle(patchStartX, patchStartY, patchEndX - patchStartX, patchEndY - patchStartY);
+                        SaveCroppedImage(filename, source, myBoundingBox);
+                    }
                 }
+
+                //using (WebClient client = new WebClient())
+                //{
+                //    client.DownloadFile(label.MyUrl, _myFolder + "\\images\\" + myFileName);
+                //}
 
                 double percentage = i / (double)allLabels;
                 int progressPercentage = Convert.ToInt32(percentage * 100);
