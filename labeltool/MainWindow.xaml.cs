@@ -15,6 +15,7 @@ using System.Windows.Media.Imaging;
 using Newtonsoft.Json;
 using Brush = System.Windows.Media.Brush;
 using Brushes = System.Windows.Media.Brushes;
+using Image = System.Drawing.Image;
 using ListView = System.Windows.Controls.ListView;
 using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using Point = System.Windows.Point;
@@ -142,8 +143,10 @@ namespace labeltool
             if (_myLabels == null) return;
 
             _myFolder = myDiag.SelectedPath;
-            Directory.CreateDirectory(_myFolder + "\\images");
-            Directory.CreateDirectory(_myFolder + "\\labels");
+            Directory.CreateDirectory(_myFolder + "\\images_train");
+            Directory.CreateDirectory(_myFolder + "\\images_val");
+            Directory.CreateDirectory(_myFolder + "\\labels_train");
+            Directory.CreateDirectory(_myFolder + "\\labels_val");
 
             _myWorker = new BackgroundWorker();
             _myWorker.DoWork += WriteDataToFolder;
@@ -169,6 +172,7 @@ namespace labeltool
             BackgroundWorker backgroundWorker = sender as BackgroundWorker;
             int allLabels = _myLabels.Count;
             int i = 1;
+            int valtrainratio = 1;
             foreach (MyLabelData label in _myLabels)
             {
                 string[] urlSplit = label.MyUrl.Split('/');
@@ -262,12 +266,26 @@ namespace labeltool
                             allLabelContent.AppendLine(labelcontent);
                         }
 
+                        string labelfolder = "labels_train";
+                        string imagefolder = "images_train";
+                        if (valtrainratio<10)
+                        {
+                            valtrainratio++;
+                        }
+                        else
+                        {
+                            labelfolder = "labels_val";
+                            imagefolder = "images_val";
+                            valtrainratio = 0;
+                        }
                         string curLabelFilename = label.Filename + "_" + j + "_" + k;
-                        File.WriteAllText(_myFolder + "\\labels\\" + curLabelFilename + ".txt", allLabelContent.ToString());
+                        string labelfilename = _myFolder + "\\" + labelfolder + "\\" + curLabelFilename + ".txt";
+                        string imagefilename = _myFolder + "\\" + imagefolder + "\\" + curLabelFilename + ".jpg";
 
-                        string filename = _myFolder + "\\images\\" + curLabelFilename + ".jpg";
+                        File.WriteAllText(labelfilename, allLabelContent.ToString());
+
                         Rectangle myBoundingBox = new Rectangle(patchStartX, patchStartY, patchEndX - patchStartX, patchEndY - patchStartY);
-                        SaveCroppedImage(filename, source, myBoundingBox);
+                        SaveCroppedImage(imagefilename, source, myBoundingBox);
                     }
                 }
 
